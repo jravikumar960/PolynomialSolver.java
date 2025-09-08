@@ -5,8 +5,7 @@ import java.io.*;
 import java.math.BigInteger;
 import java.util.*;
 
-public class PolynomialSolver {
-
+public class PolynomialSolverExact {
     public static void main(String[] args) throws IOException {
         BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
         StringBuilder jsonBuilder = new StringBuilder();
@@ -18,7 +17,6 @@ public class PolynomialSolver {
 
         JsonObject rootObj = JsonParser.parseString(jsonString).getAsJsonObject();
         JsonObject keys = rootObj.getAsJsonObject("keys");
-        int n = keys.get("n").getAsInt();
         int k = keys.get("k").getAsInt();
 
         if (k < 3) {
@@ -26,84 +24,64 @@ public class PolynomialSolver {
             return;
         }
 
-        List<Integer> xList = new ArrayList<>();
-        List<Double> yList = new ArrayList<>();
+        List<BigInteger> xList = new ArrayList<>();
+        List<BigInteger> yList = new ArrayList<>();
 
         int count = 0;
         for (Map.Entry<String, JsonElement> entry : rootObj.entrySet()) {
             if (entry.getKey().equals("keys")) continue;
             if (count == 3) break;
-
-            int x = Integer.parseInt(entry.getKey());
+            BigInteger x = new BigInteger(entry.getKey());
             JsonObject valObj = entry.getValue().getAsJsonObject();
             int base = Integer.parseInt(valObj.get("base").getAsString());
             String valueStr = valObj.get("value").getAsString();
-
             BigInteger yBig = new BigInteger(valueStr, base);
-            double y = yBig.doubleValue();
-
             xList.add(x);
-            yList.add(y);
-
+            yList.add(yBig);
             count++;
         }
 
-        double[][] A = new double[3][3];
-        double[] Y = new double[3];
-
+        BigInteger[][] A = new BigInteger[3][3];
+        BigInteger[] Y = new BigInteger[3];
         for (int i = 0; i < 3; i++) {
-            double x = xList.get(i);
-            A[i][0] = x * x;
+            BigInteger x = xList.get(i);
+            A[i][0] = x.multiply(x);
             A[i][1] = x;
-            A[i][2] = 1;
+            A[i][2] = BigInteger.ONE;
             Y[i] = yList.get(i);
         }
 
-        double[] coef = gaussianSolve(A, Y);
+        BigInteger detA = determinant3x3(A);
+        if (detA.equals(BigInteger.ZERO)) throw new RuntimeException("Matrix is singular");
 
-        System.out.printf("Constant term c = %.6f\n", coef[2]);
+        BigInteger[][] A_a = replaceColumn(A, Y, 0);
+        BigInteger[][] A_b = replaceColumn(A, Y, 1);
+        BigInteger[][] A_c = replaceColumn(A, Y, 2);
+
+        BigInteger detA_a = determinant3x3(A_a);
+        BigInteger detA_b = determinant3x3(A_b);
+        BigInteger detA_c = determinant3x3(A_c);
+
+        BigInteger c = detA_c.divide(detA);
+        System.out.println("Constant term c = " + c);
     }
 
-    public static double[] gaussianSolve(double[][] A, double[] b) {
-        int n = b.length;
+    public static BigInteger determinant3x3(BigInteger[][] M) {
+        return M[0][0].multiply(M[1][1]).multiply(M[2][2])
+                .add(M[0][1].multiply(M[1][2]).multiply(M[2][0]))
+                .add(M[0][2].multiply(M[1][0]).multiply(M[2][1]))
+                .subtract(M[0][2].multiply(M[1][1]).multiply(M[2][0]))
+                .subtract(M[0][0].multiply(M[1][2]).multiply(M[2][1]))
+                .subtract(M[0][1].multiply(M[1][0]).multiply(M[2][2]));
+    }
 
-        for (int p = 0; p < n; p++) {
-            int max = p;
-            for (int i = p + 1; i < n; i++) {
-                if (Math.abs(A[i][p]) > Math.abs(A[max][p])) {
-                    max = i;
-                }
-            }
-
-            double[] tempRow = A[p];
-            A[p] = A[max];
-            A[max] = tempRow;
-
-            double tempVal = b[p];
-            b[p] = b[max];
-            b[max] = tempVal;
-
-            if (Math.abs(A[p][p]) < 1e-15) {
-                throw new RuntimeException("Matrix is singular or near singular");
-            }
-
-            for (int i = p + 1; i < n; i++) {
-                double alpha = A[i][p] / A[p][p];
-                b[i] -= alpha * b[p];
-                for (int j = p; j < n; j++) {
-                    A[i][j] -= alpha * A[p][j];
-                }
+    public static BigInteger[][] replaceColumn(BigInteger[][] M, BigInteger[] Y, int col) {
+        BigInteger[][] result = new BigInteger[3][3];
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                result[i][j] = (j == col) ? Y[i] : M[i][j];
             }
         }
-
-        double[] x = new double[n];
-        for (int i = n - 1; i >= 0; i--) {
-            double sum = b[i];
-            for (int j = i + 1; j < n; j++) {
-                sum -= A[i][j] * x[j];
-            }
-            x[i] = sum / A[i][i];
-        }
-        return x;
+        return result;
     }
 }
